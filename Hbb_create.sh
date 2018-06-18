@@ -1,6 +1,8 @@
 
-##
-export SUBMIT=1
+## Set this options before running 
+TEST=0  ## only run a signal sample
+SUBMIT=1 ## 0 : only print command, 1 : condor submission, 2 : run in interactive/local machine
+EOSOUTPUTDIR=/store/user/benitezj/ggHbb/limits/2016  # where the histograms will be saved from condor job
 
 ## 
 LUMI=35.9
@@ -14,27 +16,32 @@ echo 'MC input dir= ' $INPUTDIR
 INPUTDIRDATA=root://cmseos.fnal.gov//eos/uscms/store/user/lpchbb/zprimebits-v12.05
 echo 'data input dir= ' $INPUTDIRDATA
 
-## output dir
-echo 'output dir= ' $PWD 
+## local output dir
+echo 'local output dir = ' $PWD 
+echo 'eos output dir = ' $EOSOUTPUTDIR
 
+### need to tar the CMSSW to submit condor job
+if [ "${SUBMIT}" == "1" ]; then
+    /bin/rm -f ${CMSSW_BASE}.tar
+    /bin/tar -cvf ${CMSSW_BASE}.tar -C $CMSSW_BASE/../ $CMSSW_VERSION
+    if [ ! -f ${CMSSW_BASE}.tar ]; then
+	echo "CMSSW tar not created"
+	return 0
+    fi
+fi
 
-### need to tar the CMSSW like this to put in the home area
-## tar -cvf $HOME/CMSSW.tar -C /uscms/home/benitezj/work/ggHbb/limits CMSSW_7_4_7
-
-
-### job submision function
+### job submision function needed below
 submit()
 {
-
     eval sample="$1"
     eval command="$2"
     
     local outfile=$PWD/ggHbb_${sample}
     
-    rm -f ${outfile}.log
+    /bin/rm -f ${outfile}.log
 
 
-    ## on submission
+    ## no run, just print the command 
     if [ "$SUBMIT" == "0" ]; then
 	echo $command	
     fi
@@ -45,29 +52,20 @@ submit()
 	############
 	## clean out the output
 	#########
-	rm -f /eos/uscms/store/user/benitezj/ggHbb/limits/2016/hist_${sample}.root
+	/bin/rm -f /eos/uscms/${EOSOUTPUTDIR}/hist_${sample}.root
 
 	######################
 	### create the execution script
 	#######################
-	rm -f ${outfile}.sh
+	/bin/rm -f ${outfile}.sh
 	touch ${outfile}.sh
-	#echo "source ${HOME}/.profile  " >> ${outfile}.sh
-	#echo "cd ${PWD}"  >> ${outfile}.sh
-	#echo "pwd"  >> ${outfile}.sh
-	#echo "mount"  >> ${outfile}.sh
-	#echo "cmsenv"  >> ${outfile}.sh
-	#echo "${command}" >> ${outfile}.sh 
-
-
-        ##### cope with LPC disk mounts, see https://uscms.org/uscms_at_work/computing/setup/batch_systems.shtml#code_11
 	echo "pwd"  >> ${outfile}.sh
 	echo "mount"  >> ${outfile}.sh
-        echo "tar -xf CMSSW.tar"  >> ${outfile}.sh
+        echo "/bin/tar -xf ${CMSSW_VERSION}.tar"  >> ${outfile}.sh
 	echo "ls ."  >> ${outfile}.sh
 	echo "source /cvmfs/cms.cern.ch/cmsset_default.sh"  >> ${outfile}.sh
         echo "export SCRAM_ARCH=slc6_amd64_gcc530"  >> ${outfile}.sh 
-	echo "cd ./CMSSW_7_4_7/src"  >> ${outfile}.sh
+	echo "cd ./${CMSSW_VERSION}/src"  >> ${outfile}.sh
 	echo "scramv1 b ProjectRename "  >> ${outfile}.sh
 	echo "eval \`scramv1 runtime -sh\` "  >> ${outfile}.sh
         echo "cd DAZSLE/ZPrimePlusJet/"  >> ${outfile}.sh
@@ -75,27 +73,24 @@ submit()
 	echo "cd ../../"  >> ${outfile}.sh
 	echo "env"  >> ${outfile}.sh
 	echo "${command}" >> ${outfile}.sh 
-	echo "xrdcp hist.root root://cmseos.fnal.gov//store/user/benitezj/ggHbb/limits/2016/hist_${sample}.root" >> ${outfile}.sh 
+	echo "xrdcp hist.root root://cmseos.fnal.gov/${EOSOUTPUTDIR}/hist_${sample}.root" >> ${outfile}.sh 
 	
 
 
 	################
 	### create condor jdl
 	################
-	rm -f ${outfile}.sub
+	/bin/rm -f ${outfile}.sub
 	touch ${outfile}.sub
 	echo "Universe   = vanilla" >> ${outfile}.sub 
 	echo "Executable = /bin/bash" >> ${outfile}.sub 
-	#echo "Arguments  = ${outfile}.sh" >> ${outfile}.sub
 	echo "Log        = ${outfile}.log" >> ${outfile}.sub
 	echo "Output     = ${outfile}.log" >> ${outfile}.sub
 	echo "Error      = ${outfile}.log" >> ${outfile}.sub
-
-       ##### cope with LPC disk mounts, see https://uscms.org/uscms_at_work/computing/setup/batch_systems.shtml#code_11
 	echo "Arguments  = ggHbb_${sample}.sh" >> ${outfile}.sub
 	echo "Should_Transfer_Files = YES" >> ${outfile}.sub
 	echo "WhenToTransferOutput = ON_EXIT" >> ${outfile}.sub
-	echo "Transfer_Input_Files = ggHbb_${sample}.sh, ${HOME}/CMSSW.tar" >> ${outfile}.sub
+	echo "Transfer_Input_Files = ggHbb_${sample}.sh, ${CMSSW_BASE}.tar" >> ${outfile}.sub
 
 
 	echo "Queue" >> ${outfile}.sub
@@ -105,7 +100,7 @@ submit()
 	`${condorsub}`
     fi
 
-     ##process in the same machine
+     ##process in the local machine (testing)
     if [ "$SUBMIT" == "2" ]; then
 	echo $command
 	`${command} >> ${outfile}.log 2>&1 &`
@@ -125,6 +120,7 @@ QCDFILES=QCD_HT100to200_13TeV_1000pb_weighted.root,QCD_HT200to300_13TeV_all_1000
 ### submit the jobs
 command="python ./ggHbbAnalysis/Hbb_create.py -p hqq125  --lumi $LUMI -o ./ -i $INPUTDIRDATA -f GluGluHToBB_M125_13TeV_powheg_pythia8_CKKW_1000pb_weighted.root"
 submit "hqq125" "\${command}"
+if [ "$TEST" == "1" ]; then return 1 ; fi
 
 command="python ./ggHbbAnalysis/Hbb_create.py -p vbfhqq125  --lumi $LUMI -o ./ -i $INPUTDIR -f VBFHToBB_M_125_13TeV_powheg_pythia8_weightfix_all_1000pb_weighted.root"
 submit "vbfhqq125" "\${command}"
@@ -177,8 +173,57 @@ submit "data_obs" "\${command}"
 
 
 
-## MuonCR DATA files
+###  MuonCR DATA files 
+### (WARNING: muonCR and nominal data cannot run in the same directory because they will write to same output file name)
 MUONCRFILES=SingleMuonRun2016B_03Feb2017_ver1_v1_fixtrig.root,SingleMuonRun2016B_03Feb2017_ver2_v2_fixtrig.root,SingleMuonRun2016C_03Feb2017_v1_fixtrig.root,SingleMuonRun2016D_03Feb2017_v1_fixtrig.root,SingleMuonRun2016E_03Feb2017_v1_fixtrig.root,SingleMuonRun2016F_03Feb2017_v1_fixtrig.root,SingleMuonRun2016G_03Feb2017_v1_fixtrig.root,SingleMuonRun2016H_03Feb2017_ver2_v1_fixtrig.root,SingleMuonRun2016H_03Feb2017_ver3_v1_fixtrig.root
 
 command="python ./ggHbbAnalysis/Hbb_create.py -p data_obs --data --muonCR  --lumi $LUMI -o ./ -i $INPUTDIRDATA -f $MUONCRFILES"
 submit "data_obs_muonCR" "\${command}"
+
+
+
+### Loose BB cut (0.8)
+command="python ./ggHbbAnalysis/Hbb_create.py -p hqq125   --dbtag 0.8  --lumi $LUMI -o ./ -i $INPUTDIRDATA -f GluGluHToBB_M125_13TeV_powheg_pythia8_CKKW_1000pb_weighted.root"
+submit "hqq125_looserWZ" "\${command}"
+
+command="python ./ggHbbAnalysis/Hbb_create.py -p vbfhqq125   --dbtag 0.8  --lumi $LUMI -o ./ -i $INPUTDIR -f VBFHToBB_M_125_13TeV_powheg_pythia8_weightfix_all_1000pb_weighted.root"
+submit "vbfhqq125_looserWZ" "\${command}"
+
+command="python ./ggHbbAnalysis/Hbb_create.py -p zhqq125   --dbtag 0.8  --lumi $LUMI -o ./ -i $INPUTDIR -f $ZHFILES"
+submit "zhqq125_looserWZ" "\${command}"
+
+command="python ./ggHbbAnalysis/Hbb_create.py -p whqq125   --dbtag 0.8  --lumi $LUMI -o ./ -i $INPUTDIR -f $WHFILES"
+submit "whqq125_looserWZ" "\${command}"
+
+command="python ./ggHbbAnalysis/Hbb_create.py -p tthqq125   --dbtag 0.8  --lumi $LUMI -o ./ -i $INPUTDIR -f ttHTobb_M125_13TeV_powheg_pythia8_1000pb_weighted.root"
+submit "tthqq125_looserWZ" "\${command}"
+
+command="python ./ggHbbAnalysis/Hbb_create.py -p vvqq   --dbtag 0.8  --lumi $LUMI -o ./ -i $INPUTDIR -f $VVFILES"
+submit "vvqq_looserWZ" "\${command}"
+
+command="python ./ggHbbAnalysis/Hbb_create.py -p zqq   --dbtag 0.8  --lumi $LUMI -o ./ -i $INPUTDIR -f DYJetsToQQ_HT180_13TeV_1000pb_weighted_v1204.root"
+submit "zqq_looserWZ" "\${command}"
+
+command="python ./ggHbbAnalysis/Hbb_create.py -p stqq   --dbtag 0.8  --lumi $LUMI -o ./ -i $INPUTDIR -f $STFILES"
+submit "stqq_looserWZ" "\${command}"
+
+command="python ./ggHbbAnalysis/Hbb_create.py -p wqq   --dbtag 0.8  --lumi $LUMI -o ./ -i $INPUTDIR -f WJetsToQQ_HT180_13TeV_1000pb_weighted_v1204.root"
+submit "wqq_looserWZ" "\${command}"
+
+command="python ./ggHbbAnalysis/Hbb_create.py -p wlnu   --dbtag 0.8  --lumi $LUMI -o ./ -i $INPUTDIR -f $WFILES"
+submit "wlnu_looserWZ" "\${command}"
+
+command="python ./ggHbbAnalysis/Hbb_create.py -p zll   --dbtag 0.8  --lumi $LUMI -o ./ -i $INPUTDIR -f DYJetsToLL_M_50_13TeV_ext_1000pb_weighted.root"
+submit "zll_looserWZ" "\${command}"
+
+command="python ./ggHbbAnalysis/Hbb_create.py -p tqq   --dbtag 0.8  --lumi $LUMI -o ./ -i $INPUTDIR -f TT_powheg_1000pb_weighted_v1204.root"
+submit "tqq_looserWZ" "\${command}"
+
+
+
+
+
+#### show the jobs in the queue
+if [ "${SUBMIT}" == "1" ]; then
+    /usr/bin/condor_q
+fi

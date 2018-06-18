@@ -11,12 +11,6 @@ from sampleContainer import *
 
 ##----##----##----##----##----##----##
 def main(options, args):
-
-    ##--## output file name
-#    if options.muonCR:
-#        fileName = 'hist_' + options.process + '_muonCR.root'
-#    else:
-#        fileName = 'hist_' + options.process + '.root'
     
     fileName = 'hist.root'
     
@@ -39,13 +33,13 @@ def main(options, args):
     ##--## process the samples
     if options.data:
         if options.muonCR:
-            container = sampleContainer('data_obs', tfiles['data_obs'],        1, options.dbtagmin, options.lumi, True, False,
+            container = sampleContainer('data_obs', files, 1, options.dbtagmin, options.dbtag, options.lumi, True, False,
                                         '((triggerBits&4)&&passJson)', True)
         else:
-            dataSample = sampleContainer('data_obs', tfiles['data_obs'],        1, options.dbtagmin, options.lumi, True, False,
+            container = sampleContainer('data_obs', files, 1, options.dbtagmin, options.dbtag, options.lumi, True, False,
                                          '((triggerBits&2)&&passJson)', True)
     else:
-        container = sampleContainer(options.process,files, 1, options.dbtagmin, options.lumi, False, False, '1', True)
+        container = sampleContainer(options.process,files, 1, options.dbtagmin, options.dbtag, options.lumi, False, False, '1', True)
 
 
 
@@ -111,16 +105,14 @@ if __name__ == '__main__':
     parser = OptionParser()
     parser.add_option('-b', action='store_true', dest='noX', default=False, help='no X11 windows')
     parser.add_option("--lumi", dest="lumi", default=35.9, type="float", help="luminosity", metavar="lumi")
-    parser.add_option("--bb", action='store_true', dest="bb", default=False, help="sort by double b-tag")
     parser.add_option('-i', '--idir', dest='idir', default='data/', help='directory with data', metavar='idir')
     parser.add_option('-o', '--odir', dest='odir', default='./', help='directory to write histograms', metavar='odir')
     parser.add_option('-m', '--muonCR', action='store_true', dest='muonCR', default=False, help='for muon CR', metavar='muonCR')
     parser.add_option('-d', '--dbtagmin', dest='dbtagmin', default=-99., type="float",help='left bound to btag selection', metavar='dbtagmin')
-    parser.add_option('--skip-qcd', action='store_true', dest='skipQCD', default=False, help='skip QCD', metavar='skipQCD')
-    parser.add_option('--skip-data', action='store_true', dest='skipData', default=False, help='skip Data', metavar='skipData')
     parser.add_option('-p', '--process', dest='process', default='none', help='process name', metavar='process')
     parser.add_option('-f', '--files', dest='files', default='none', help='input root files comma separated', metavar='files')
     parser.add_option('--data', action='store_true', dest='data', default=False, help='data samples flag', metavar='data')
+    parser.add_option('--dbtag', dest='dbtag', default=0.9, type="float",help='left bound to btag selection', metavar='dbtag')
 
     (options, args) = parser.parse_args()
 
